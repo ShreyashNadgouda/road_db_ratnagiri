@@ -7,14 +7,15 @@ from sqlalchemy.pool import QueuePool
 import pandas as pd
 from datetime import datetime
 from urllib.parse import quote_plus
+import os
 
 # Database configuration
 database = {
-    'host': "127.0.0.1",
-    'port': 5432,  # Postgres default port
-    'db': "testing1",
-    'user': "shreeshnadgouda",
-    'password': "yash1234",
+    'host': os.getenv("DB_HOST", "127.0.0.1"),
+    'port': int(os.getenv("DB_PORT", 5432)),
+    'db': os.getenv("DB_NAME", "testing1"),
+    'user': os.getenv("DB_USER", "shreeshnadgouda"),
+    'password': os.getenv("DB_PASSWORD", "yash1234"),
 }
 
 # SQLAlchemy engine creation with connection pooling
@@ -27,6 +28,7 @@ def get_postgis_engine():
     )
     engine = create_engine(url, poolclass=QueuePool, pool_size=5, max_overflow=10)
     return engine
+
 
 # Fetch data from database with caching
 @st.cache_data(ttl=600)
