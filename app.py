@@ -10,21 +10,19 @@ from urllib.parse import quote_plus
 import os
 
 # Database configuration
-database = {
-    'host': os.getenv("DB_HOST", "127.0.0.1"),
-    'port': int(os.getenv("DB_PORT", 5432)),  # Postgres default port
-    'db': os.getenv("DB_NAME", "testing1"),
-    'user': os.getenv("DB_USER", "shreeshnadgouda"),
-    'password': os.getenv("DB_PASSWORD", "yash1234"),
-}
-
-# SQLAlchemy engine creation with connection pooling
+# SQLAlchemy engine creation with connection pooling using Streamlit secrets
 def get_postgis_engine():
+    db_host = st.secrets["DB"]["DB_HOST"]
+    db_port = st.secrets["DB"]["DB_PORT"]
+    db_name = st.secrets["DB"]["DB_NAME"]
+    db_user = st.secrets["DB"]["DB_USER"]
+    db_password = st.secrets["DB"]["DB_PASSWORD"]
+
     url = (
         f'postgresql+psycopg2://'
-        f'{database["user"]}:{quote_plus(database["password"])}'
-        f'@{database["host"]}:{database["port"]}'
-        f'/{database["db"]}'
+        f'{db_user}:{quote_plus(db_password)}'
+        f'@{db_host}:{db_port}'
+        f'/{db_name}'
     )
     engine = create_engine(url, poolclass=QueuePool, pool_size=5, max_overflow=10)
     return engine
