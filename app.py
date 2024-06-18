@@ -8,8 +8,14 @@ import pandas as pd
 from datetime import datetime
 from urllib.parse import quote_plus
 
-# Database configuration using Streamlit secrets
-database = st.secrets["database"]
+# Database configuration
+database = {
+    'host': "127.0.0.1",
+    'port': 5432,  # Postgres default port
+    'db': "testing1",
+    'user': "shreeshnadgouda",
+    'password': "yash1234",
+}
 
 # SQLAlchemy engine creation with connection pooling
 def get_postgis_engine():
@@ -21,9 +27,6 @@ def get_postgis_engine():
     )
     engine = create_engine(url, poolclass=QueuePool, pool_size=5, max_overflow=10)
     return engine
-
-# The rest of your code...
-
 
 # Fetch data from database with caching
 @st.cache_data(ttl=600)
