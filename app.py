@@ -12,11 +12,13 @@ import streamlit as st
 from sqlalchemy import create_engine
 from sqlalchemy.pool import QueuePool
 from urllib.parse import quote_plus
-
 import streamlit as st
 from sqlalchemy import create_engine
 from sqlalchemy.pool import QueuePool
 from urllib.parse import quote_plus
+import geopandas as gpd
+from sqlalchemy.sql import text
+from datetime import datetime
 
 # Load secrets
 secrets = st.secrets["database"]
@@ -31,7 +33,6 @@ def get_postgis_engine():
     )
     engine = create_engine(url, poolclass=QueuePool, pool_size=5, max_overflow=10)
     return engine
-
 
 # Fetch data from database with caching
 @st.cache_data(ttl=600)
@@ -48,6 +49,7 @@ def fetch_data(query):
 # Convert date from `dd.mm.yyyy` to `yyyy-mm-dd`
 def convert_date(date_str):
     return datetime.strptime(date_str, '%d.%m.%Y').strftime('%Y-%m-%d')
+
 
 # Paths to shapefiles
 district_shapefile_path = 'data/Ratnagiri_Taluka_Boundries'
