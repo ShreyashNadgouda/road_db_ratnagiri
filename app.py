@@ -9,26 +9,25 @@ from datetime import datetime
 from urllib.parse import quote_plus
 
 import streamlit as st
-from urllib.parse import quote_plus
 from sqlalchemy import create_engine
 from sqlalchemy.pool import QueuePool
+from urllib.parse import quote_plus
 
-# Fetching database configuration from Streamlit secrets
-database = {
-    'host': st.secrets["db_host"],
-    'port': st.secrets["db_port"],
-    'db': st.secrets["db_name"],
-    'user': st.secrets["db_user"],
-    'password': st.secrets["db_password"],
-}
+import streamlit as st
+from sqlalchemy import create_engine
+from sqlalchemy.pool import QueuePool
+from urllib.parse import quote_plus
+
+# Load secrets
+secrets = st.secrets["database"]
 
 # SQLAlchemy engine creation with connection pooling
 def get_postgis_engine():
     url = (
         f'postgresql+psycopg2://'
-        f'{database["user"]}:{quote_plus(database["password"])}'
-        f'@{database["host"]}:{database["port"]}'
-        f'/{database["db"]}'
+        f'{quote_plus(secrets["user"])}:{quote_plus(secrets["password"])}'
+        f'@{secrets["host"]}:{secrets["port"]}'
+        f'/{quote_plus(secrets["db"])}'
     )
     engine = create_engine(url, poolclass=QueuePool, pool_size=5, max_overflow=10)
     return engine
