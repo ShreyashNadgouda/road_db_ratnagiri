@@ -7,25 +7,32 @@ from sqlalchemy.pool import QueuePool
 import pandas as pd
 from datetime import datetime
 from urllib.parse import quote_plus
-import os
 
-# Database configuration
-# SQLAlchemy engine creation with connection pooling using Streamlit secrets
+import streamlit as st
+from urllib.parse import quote_plus
+from sqlalchemy import create_engine
+from sqlalchemy.pool import QueuePool
+
+# Fetching database configuration from Streamlit secrets
+database = {
+    'host': st.secrets["db_host"],
+    'port': st.secrets["db_port"],
+    'db': st.secrets["db_name"],
+    'user': st.secrets["db_user"],
+    'password': st.secrets["db_password"],
+}
+
+# SQLAlchemy engine creation with connection pooling
 def get_postgis_engine():
-    db_host = st.secrets["DB"]["DB_HOST"]
-    db_port = st.secrets["DB"]["DB_PORT"]
-    db_name = st.secrets["DB"]["DB_NAME"]
-    db_user = st.secrets["DB"]["DB_USER"]
-    db_password = st.secrets["DB"]["DB_PASSWORD"]
-
     url = (
         f'postgresql+psycopg2://'
-        f'{db_user}:{quote_plus(db_password)}'
-        f'@{db_host}:{db_port}'
-        f'/{db_name}'
+        f'{database["user"]}:{quote_plus(database["password"])}'
+        f'@{database["host"]}:{database["port"]}'
+        f'/{database["db"]}'
     )
     engine = create_engine(url, poolclass=QueuePool, pool_size=5, max_overflow=10)
     return engine
+
 
 # Fetch data from database with caching
 @st.cache_data(ttl=600)
@@ -46,6 +53,7 @@ def convert_date(date_str):
 # Paths to shapefiles
 district_shapefile_path = 'data/Ratnagiri_Taluka_Boundries'
 road_network_shapefile_path = 'data/RN_DIV'
+
 
 
 # Load district shapefile
