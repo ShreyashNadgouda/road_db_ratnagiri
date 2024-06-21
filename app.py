@@ -12,13 +12,14 @@ import streamlit as st
 from sqlalchemy import create_engine
 from sqlalchemy.pool import QueuePool
 from urllib.parse import quote_plus
-import streamlit as st
-from sqlalchemy import create_engine
-from sqlalchemy.pool import QueuePool
-from urllib.parse import quote_plus
 import geopandas as gpd
 from sqlalchemy.sql import text
 from datetime import datetime
+import logging
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Load secrets
 secrets = st.secrets["database"]
@@ -31,8 +32,15 @@ def get_postgis_engine():
         f'@{secrets["host"]}:{secrets["port"]}'
         f'/{quote_plus(secrets["db"])}'
     )
-    engine = create_engine(url, poolclass=QueuePool, pool_size=5, max_overflow=10)
-    return engine
+    st.write(f"Database URL: {url}")  # For debugging
+    logger.info(f"Attempting to connect to the database at {url}")
+    try:
+        engine = create_engine(url, poolclass=QueuePool, pool_size=5, max_overflow=10, connect_args={'connect_timeout': 10})
+        logger.info("Database engine created successfully")
+        return engine
+    except Exception as e:
+        logger.error(f"Failed to create database engine: {e}")
+        st.error(f"Failed to create database engine: {e}")
 
 # Fetch data from database with caching
 @st.cache_data(ttl=600)
