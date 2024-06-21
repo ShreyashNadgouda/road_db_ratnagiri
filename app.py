@@ -4,10 +4,11 @@ import folium
 from streamlit_folium import st_folium
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import QueuePool
-import pandas as pd
-from datetime import datetime
 from urllib.parse import quote_plus
+from datetime import datetime
 import logging
+import time
+from sqlalchemy.exc import OperationalError
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -16,9 +17,9 @@ logger = logging.getLogger(__name__)
 # Load secrets
 secrets = st.secrets["database"]
 
-# SQLAlchemy engine creation with connection pooling
+# SQLAlchemy engine creation with connection pooling and retry logic
 @st.cache_resource
-def get_postgis_engine():
+def get_postgis_engine_with_retries(retries=3, delay=5):
     url = (
         f'postgresql+psycopg2://'
         f'{quote_plus(secrets["user"])}:{quote_plus(secrets["password"])}'
@@ -27,19 +28,27 @@ def get_postgis_engine():
     )
     st.write(f"Database URL: {url}")  # For debugging
     logger.info(f"Attempting to connect to the database at {url}")
-    try:
-        engine = create_engine(url, poolclass=QueuePool, pool_size=5, max_overflow=10, connect_args={'connect_timeout': 10})
-        logger.info("Database engine created successfully")
-        return engine
-    except Exception as e:
-        logger.error(f"Failed to create database engine: {e}")
-        st.error(f"Failed to create database engine: {e}")
-        return None
+    
+    for attempt in range(retries):
+        try:
+            engine = create_engine(url, poolclass=QueuePool, pool_size=5, max_overflow=10, connect_args={'connect_timeout': 30})
+            # Test connection
+            with engine.connect():
+                logger.info("Database engine created successfully")
+            return engine
+        except OperationalError as e:
+            if attempt < retries - 1:
+                logger.warning(f"Connection attempt {attempt + 1} failed: {e}. Retrying in {delay} seconds...")
+                time.sleep(delay)
+            else:
+                logger.error(f"All {retries} connection attempts failed: {e}")
+                st.error(f"Failed to create database engine: {e}")
+                return None
 
 # Fetch data from database with caching
 @st.cache_data(ttl=600)
 def fetch_data(query):
-    engine = get_postgis_engine()
+    engine = get_postgis_engine_with_retries()
     if engine is None:
         st.error("Engine is not available. Unable to fetch data.")
         return gpd.GeoDataFrame()  # Return an empty GeoDataFrame on error
@@ -286,7 +295,7 @@ elif category == "Current Status":
         'Others': []  
     }
 
-    engine = get_postgis_engine()
+    engine = get_postgis_engine_with_retries()
     with engine.connect() as connection:
         result = connection.execute(text('SELECT DISTINCT "ratnagiri_final_current_status" FROM "RN_DIV"'))
         all_statuses = [row[0] for row in result if row[0] not in sum(current_status_groups.values(), [])]
@@ -304,7 +313,7 @@ elif category == "Current Status":
 
     
     # Fetch all unique status values from the database
-    engine = get_postgis_engine()
+    engine = get_postgis_engine_with_retries()
     with engine.connect() as connection:
         result = connection.execute(text('SELECT DISTINCT "ratnagiri_final_current_status" FROM "RN_DIV"'))
         all_statuses = [row[0] for row in result if row[0] not in sum(current_status_groups.values(), [])]
