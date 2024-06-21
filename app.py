@@ -7,14 +7,6 @@ from sqlalchemy.pool import QueuePool
 import pandas as pd
 from datetime import datetime
 from urllib.parse import quote_plus
-
-import streamlit as st
-from sqlalchemy import create_engine
-from sqlalchemy.pool import QueuePool
-from urllib.parse import quote_plus
-import geopandas as gpd
-from sqlalchemy.sql import text
-from datetime import datetime
 import logging
 
 # Setup logging
@@ -25,6 +17,7 @@ logger = logging.getLogger(__name__)
 secrets = st.secrets["database"]
 
 # SQLAlchemy engine creation with connection pooling
+@st.cache_resource
 def get_postgis_engine():
     url = (
         f'postgresql+psycopg2://'
@@ -41,29 +34,36 @@ def get_postgis_engine():
     except Exception as e:
         logger.error(f"Failed to create database engine: {e}")
         st.error(f"Failed to create database engine: {e}")
+        return None
 
 # Fetch data from database with caching
 @st.cache_data(ttl=600)
 def fetch_data(query):
     engine = get_postgis_engine()
-    with engine.connect() as connection:
-        gdf = gpd.read_postgis(text(query), con=connection, geom_col='geom')
-    
-    if gdf.crs is None:
-        gdf.set_crs(epsg=4326, inplace=True)  # Assuming the fetched data uses WGS84 CRS
-    
-    return gdf
+    if engine is None:
+        st.error("Engine is not available. Unable to fetch data.")
+        return gpd.GeoDataFrame()  # Return an empty GeoDataFrame on error
+
+    try:
+        with engine.connect() as connection:
+            gdf = gpd.read_postgis(text(query), con=connection, geom_col='geom')
+
+        if gdf.crs is None:
+            gdf.set_crs(epsg=4326, inplace=True)  # Assuming the fetched data uses WGS84 CRS
+
+        return gdf
+    except Exception as e:
+        logger.error(f"An error occurred while fetching data: {e}")
+        st.error(f"An error occurred while fetching data: {e}")
+        return gpd.GeoDataFrame()  # Return an empty GeoDataFrame on error
 
 # Convert date from `dd.mm.yyyy` to `yyyy-mm-dd`
 def convert_date(date_str):
     return datetime.strptime(date_str, '%d.%m.%Y').strftime('%Y-%m-%d')
 
-
 # Paths to shapefiles
 district_shapefile_path = 'data/Ratnagiri_Taluka_Boundries'
 road_network_shapefile_path = 'data/RN_DIV'
-
-
 
 # Load district shapefile
 @st.cache_resource
@@ -76,7 +76,6 @@ def load_district_gdf(path):
     return district_gdf
 
 district_gdf = load_district_gdf(district_shapefile_path)
-
 
 # Load road network shapefile
 @st.cache_resource
