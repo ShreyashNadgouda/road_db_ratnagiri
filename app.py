@@ -10,7 +10,7 @@ from urllib.parse import quote_plus
 import requests
 
 # FastAPI URL configuration
-API_URL = "https://your-app-name.onrender.com"
+API_URL = "https://road-db-ratnagiri.onrender.com"
 
 
 @st.cache_data(ttl=600)
