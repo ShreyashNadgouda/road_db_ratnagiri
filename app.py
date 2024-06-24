@@ -4,67 +4,45 @@ import folium
 from streamlit_folium import st_folium
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import QueuePool
-from urllib.parse import quote_plus
+import pandas as pd
 from datetime import datetime
-import logging
-import time
-from sqlalchemy.exc import OperationalError
+from urllib.parse import quote_plus
+import requests
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# FastAPI URL configuration
+API_URL = "https://your-app-name.onrender.com"
 
-# Load secrets
-secrets = st.secrets["database"]
 
-# SQLAlchemy engine creation with connection pooling and retry logic
-@st.cache_resource
-def get_postgis_engine_with_retries(retries=3, delay=5):
-    url = (
-        f'postgresql+psycopg2://'
-        f'{quote_plus(secrets["user"])}:{quote_plus(secrets["password"])}'
-        f'@{secrets["host"]}:{secrets["port"]}'
-        f'/{quote_plus(secrets["db"])}'
-    )
-    st.write(f"Database URL: {url}")  # For debugging
-    logger.info(f"Attempting to connect to the database at {url}")
-    
-    for attempt in range(retries):
-        try:
-            engine = create_engine(url, poolclass=QueuePool, pool_size=5, max_overflow=10, connect_args={'connect_timeout': 30})
-            # Test connection
-            with engine.connect():
-                logger.info("Database engine created successfully")
-            return engine
-        except OperationalError as e:
-            if attempt < retries - 1:
-                logger.warning(f"Connection attempt {attempt + 1} failed: {e}. Retrying in {delay} seconds...")
-                time.sleep(delay)
-            else:
-                logger.error(f"All {retries} connection attempts failed: {e}")
-                st.error(f"Failed to create database engine: {e}")
-                return None
-
-# Fetch data from database with caching
 @st.cache_data(ttl=600)
 def fetch_data(query):
-    engine = get_postgis_engine_with_retries()
-    if engine is None:
-        st.error("Engine is not available. Unable to fetch data.")
-        return gpd.GeoDataFrame()  # Return an empty GeoDataFrame on error
-
-    try:
-        with engine.connect() as connection:
-            gdf = gpd.read_postgis(text(query), con=connection, geom_col='geom')
-
+    response = requests.post(f"{API_URL}/query", json={"query": query})
+    
+    if response.status_code == 200:
+        gdf = gpd.read_file(response.json())
         if gdf.crs is None:
-            gdf.set_crs(epsg=4326, inplace=True)  # Assuming the fetched data uses WGS84 CRS
-
+            gdf.set_crs(epsg=4326, inplace=True)
         return gdf
-    except Exception as e:
-        logger.error(f"An error occurred while fetching data: {e}")
-        st.error(f"An error occurred while fetching data: {e}")
-        return gpd.GeoDataFrame()  # Return an empty GeoDataFrame on error
+    else:
+        st.error(f"Error fetching data: {response.text}")
+        return gpd.GeoDataFrame()
+
+@st.cache_data(ttl=600)
+def fetch_unique_statuses():
+    response = requests.get(f"{API_URL}/unique-statuses")
+    
+    if response.status_code == 200:
+        return response.json()
+    else:
+        st.error(f"Error fetching statuses: {response.text}")
+        return []
+
+# Fetch all unique status values from the API
+all_statuses = fetch_unique_statuses()
+current_status_groups = {'Others': [status for status in all_statuses if status not in sum(current_status_groups.values(), [])]}
+
+# Combine all statuses into a single list for selection
+all_current_statuses = sum(current_status_groups.values(), [])
+
 
 # Convert date from `dd.mm.yyyy` to `yyyy-mm-dd`
 def convert_date(date_str):
@@ -73,6 +51,8 @@ def convert_date(date_str):
 # Paths to shapefiles
 district_shapefile_path = 'data/Ratnagiri_Taluka_Boundries'
 road_network_shapefile_path = 'data/RN_DIV'
+
+
 
 # Load district shapefile
 @st.cache_resource
@@ -85,6 +65,7 @@ def load_district_gdf(path):
     return district_gdf
 
 district_gdf = load_district_gdf(district_shapefile_path)
+
 
 # Load road network shapefile
 @st.cache_resource
@@ -295,43 +276,35 @@ elif category == "Current Status":
         'Others': []  
     }
 
-    engine = get_postgis_engine_with_retries()
-    with engine.connect() as connection:
-        result = connection.execute(text('SELECT DISTINCT "ratnagiri_final_current_status" FROM "RN_DIV"'))
-        all_statuses = [row[0] for row in result if row[0] not in sum(current_status_groups.values(), [])]
+   # Function to fetch unique statuses from FastAPI
+def fetch_unique_statuses():
+    api_url = "http://your-api-url/unique-statuses"  # Replace with your FastAPI URL for unique statuses
+    response = requests.get(api_url)
+    
+    if response.status_code == 200:
+        return response.json()
+    else:
+        st.error(f"Error fetching statuses: {response.text}")
+        return []
 
-    current_status_groups['Others'] = all_statuses
-    all_current_statuses = sum(current_status_groups.values(), [])
-    selected_current_statuses = st.multiselect("Select Current Status", all_current_statuses)
+# Fetch all unique status values from the API
+all_statuses = fetch_unique_statuses()
+current_status_groups['Others'] = [status for status in all_statuses if status not in sum(current_status_groups.values(), [])]
 
-    block_filter = f' AND "block_name" = \'{selected_block}\'' if selected_block != "All" else ""
+# Combine all statuses into a single list for selection
+all_current_statuses = sum(current_status_groups.values(), [])
 
-    if selected_current_statuses:
-        filtered_statuses = filter(None, selected_current_statuses)
-        values_list = "', '".join(filtered_statuses)
-        query = f'SELECT * FROM "RN_DIV" WHERE "ratnagiri_final_current_status" IN (\'{values_list}\'){block_filter}'
+# Allow the user to select one or multiple current statuses
+selected_current_statuses = st.multiselect("Select Current Status", all_current_statuses)
 
-    
-    # Fetch all unique status values from the database
-    engine = get_postgis_engine_with_retries()
-    with engine.connect() as connection:
-        result = connection.execute(text('SELECT DISTINCT "ratnagiri_final_current_status" FROM "RN_DIV"'))
-        all_statuses = [row[0] for row in result if row[0] not in sum(current_status_groups.values(), [])]
-    
-    current_status_groups['Others'] = all_statuses
-    
-    # Combine all statuses into a single list for selection
-    all_current_statuses = sum(current_status_groups.values(), [])
-    
-    # Allow the user to select one or multiple current statuses
-    selected_current_statuses = st.multiselect("Select Current Status", all_current_statuses)
-    
-    if selected_current_statuses:
-        # Filter out None values
-        filtered_statuses = filter(None, selected_current_statuses)
-        # Convert the selected values to a string for SQL IN clause
-        values_list = "', '".join(filtered_statuses)
-        query = f'SELECT * FROM "RN_DIV" WHERE "ratnagiri_final_current_status" IN (\'{values_list}\')'
+block_filter = f' AND "block_name" = \'{selected_block}\'' if selected_block != "All" else ""
+
+if selected_current_statuses:
+    # Filter out None values
+    filtered_statuses = filter(None, selected_current_statuses)
+    # Convert the selected values to a string for SQL IN clause
+    values_list = "', '".join(filtered_statuses)
+    query = f'SELECT * FROM "RN_DIV" WHERE "ratnagiri_final_current_status" IN (\'{values_list}\'){block_filter}'
 
 
 # Initialize gdf to an empty GeoDataFrame

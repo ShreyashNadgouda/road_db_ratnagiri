@@ -1,6 +1,9 @@
+fastapi
+uvicorn
+psycopg2-binary
+SQLAlchemy
 geopandas
+requests
+pandas
 folium
 streamlit-folium
-sqlalchemy
-pandas
-psycopg2-binary
