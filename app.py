@@ -13,6 +13,7 @@ import requests
 API_URL = "https://road-db-ratnagiri.onrender.com"
 
 
+
 @st.cache_data(ttl=600)
 def fetch_data(query):
     response = requests.post(f"{API_URL}/query", json={"query": query})
