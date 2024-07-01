@@ -8,21 +8,22 @@ from sqlalchemy.pool import QueuePool
 import pandas as pd
 from datetime import datetime
 from urllib.parse import quote_plus
+import os 
 
-# API endpoint
-API_URL = "https://road-db-ratnagiri.onrender.com"  # Replace with your Render FastAPI service URL
+API_URL = os.getenv("API_URL", "https://road-db-ratnagiri.onrender.com")
 
 # Fetch data from API with caching
-@st.cache_data(ttl=600)
+@st.cache(ttl=600)
 def fetch_data(query):
-    response = requests.post(f"{API_URL}/query", json={"query": query})
-    if response.status_code == 200:
+    try:
+        response = requests.post(f"{API_URL}/query", json={"query": query})
+        response.raise_for_status()  # Raise error for bad responses (4xx or 5xx)
         gdf = gpd.read_file(response.json())
         if gdf.crs is None:
             gdf.set_crs(epsg=4326, inplace=True)  # Assuming the fetched data uses WGS84 CRS
         return gdf
-    else:
-        st.error(f"Error fetching data: {response.status_code} - {response.text}")
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error fetching data: {str(e)}")
         return gpd.GeoDataFrame()
 
 # Convert date from `dd.mm.yyyy` to `yyyy-mm-dd`
