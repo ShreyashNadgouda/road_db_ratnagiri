@@ -10,19 +10,21 @@ from datetime import datetime
 from urllib.parse import quote_plus
 import os 
 
-API_URL = os.getenv("API_URL", "https://road-db-ratnagiri.onrender.com")
+# Database configuration
+DATABASE_URL = "postgresql+psycopg2://shreeshnadgouda:yash1234@localhost:5432/testing1"
+engine = create_engine(DATABASE_URL)
 
 # Fetch data from API with caching
-@st.cache(ttl=600)
+@st.cache_data(ttl=600)
 def fetch_data(query):
     try:
-        response = requests.post(f"{API_URL}/query", json={"query": query})
-        response.raise_for_status()  # Raise error for bad responses (4xx or 5xx)
-        gdf = gpd.read_file(response.json())
-        if gdf.crs is None:
-            gdf.set_crs(epsg=4326, inplace=True)  # Assuming the fetched data uses WGS84 CRS
-        return gdf
-    except requests.exceptions.RequestException as e:
+        with engine.connect() as connection:
+            result = connection.execute(text(query))
+            gdf = gpd.GeoDataFrame.from_postgis(result, geom_col='geom')
+            if gdf.crs is None:
+                gdf.set_crs(epsg=4326, inplace=True)  # Assuming the fetched data uses WGS84 CRS
+            return gdf
+    except Exception as e:
         st.error(f"Error fetching data: {str(e)}")
         return gpd.GeoDataFrame()
 
