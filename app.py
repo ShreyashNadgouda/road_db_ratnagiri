@@ -10,7 +10,7 @@ from datetime import datetime
 from urllib.parse import quote_plus
 
 # API endpoint
-API_URL = "https://your-render-api-url"  # Replace with your Render FastAPI service URL
+API_URL = "https://road-db-ratnagiri.onrender.com"  # Replace with your Render FastAPI service URL
 
 # Fetch data from API with caching
 @st.cache_data(ttl=600)
