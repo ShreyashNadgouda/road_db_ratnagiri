@@ -1,3 +1,4 @@
+import requests
 import streamlit as st
 import geopandas as gpd
 import folium
@@ -7,43 +8,22 @@ from sqlalchemy.pool import QueuePool
 import pandas as pd
 from datetime import datetime
 from urllib.parse import quote_plus
-import requests
 
-# FastAPI URL configuration
-API_URL = "https://road-db-ratnagiri.onrender.com"
+# API endpoint
+API_URL = "https://your-render-api-url"  # Replace with your Render FastAPI service URL
 
-
-
+# Fetch data from API with caching
 @st.cache_data(ttl=600)
 def fetch_data(query):
     response = requests.post(f"{API_URL}/query", json={"query": query})
-    
     if response.status_code == 200:
         gdf = gpd.read_file(response.json())
         if gdf.crs is None:
-            gdf.set_crs(epsg=4326, inplace=True)
+            gdf.set_crs(epsg=4326, inplace=True)  # Assuming the fetched data uses WGS84 CRS
         return gdf
     else:
-        st.error(f"Error fetching data: {response.text}")
+        st.error(f"Error fetching data: {response.status_code} - {response.text}")
         return gpd.GeoDataFrame()
-
-@st.cache_data(ttl=600)
-def fetch_unique_statuses():
-    response = requests.get(f"{API_URL}/unique-statuses")
-    
-    if response.status_code == 200:
-        return response.json()
-    else:
-        st.error(f"Error fetching statuses: {response.text}")
-        return []
-
-# Fetch all unique status values from the API
-all_statuses = fetch_unique_statuses()
-current_status_groups = {'Others': [status for status in all_statuses if status not in sum(current_status_groups.values(), [])]}
-
-# Combine all statuses into a single list for selection
-all_current_statuses = sum(current_status_groups.values(), [])
-
 
 # Convert date from `dd.mm.yyyy` to `yyyy-mm-dd`
 def convert_date(date_str):
@@ -194,12 +174,29 @@ elif category == "Scheme Name":
 
 elif category == "Category of Work":
     category_of_work_groups = {
-        'Asphalt Resurfacing': ['Asphalt Resurfacing', 'Asphalt Resurfacing.'],
-        'Building a protective wall': ['Building a protective wall', 'Building a protective wall.', 'Building a protective wall.  Drainage - Construction of a protective wall'],
+        'Asphalt Resurfacing': ['Asphalt Resurfacing', 'Asphalt Resurfacing.','Asphalt Resurfacing.','asphalting','asphalting','Asphaltiing','Improvement and asphalting.','Improvement, asphalting','Rocking, asphalting'],
+        'Building a protective wall': ['Building a protective wall', 'Building a protective wall.','Building protective walls', 'Construction of a protective wall'],
         'Complete Road': ['Complete Road', 'Complete Road.', 'Complete Road. Under Surface Improvement Program'],
         'Drainage': ['Drainage', 'Drainage - Construction of a protective wall.', 'Drainage - Construction of a protective wall.'],
         'Rehabilitation': ['Rehabilitation', 'Rehabilitation.', 'Rehabilitation.  Asphalt Resurfacing'],
-        'Surface': ['Surface', 'Surface Improvement']
+        'Surface': ['Surface', 'Surface Improvement'],
+        'Road widening':['Road widening.','to widen.'],
+        'Construction of bridge and gutters':['Construction of a bridge.','Construction of concrete gutters.'],
+        'Filling potholes with laterite stones':['Filling potholes with laterite stones'],
+        'Filling the pits with asphalt':['Filling the pits with asphalt'],
+        'make way':['make way'],
+        'Making the road':['Making the road'],
+        'Paving and asphalting':['Paving and asphalting'],
+        'Paving the road':['Paving the road'],
+        'Paving, reinforcement and asphalting':['Paving, reinforcement and asphalting'],
+        'Rebuilding the bridge.':['Rebuilding the bridge.','Rebuilding the Peacocks.','Repair of Peacocks','Repairing the hole.','To repair the hole','to repair the sacv'],
+        'Reinforcement and asphalting':['Reinforcement and asphalting','Reinforcement, asphalting','Erection, reinforcement and asphalting','reinforcement and asphalting','Reinforcement and asphalting.'],
+        'Renovation of asphalt, construction of retaining wall':['Renovation of asphalt, construction of retaining wall','Repair and construction of protective wall'],
+        'Resurfacing':['Resurfacing'],
+        'Road Improvement and Asphalting.':['Road Improvement and Asphalting.','Road strengthening and asphalting'],
+        'Road improvement.':['Road improvement.','to improve'],
+        'None':['None']
+        
     }
 
     selected_categories = st.multiselect("Select Category of Work", list(category_of_work_groups.keys()))
@@ -277,35 +274,49 @@ elif category == "Current Status":
         'Others': []  
     }
 
-   # Function to fetch unique statuses from FastAPI
-def fetch_unique_statuses():
-    api_url = "http://your-api-url/unique-statuses"  # Replace with your FastAPI URL for unique statuses
-    response = requests.get(api_url)
+from sqlalchemy import create_engine, text
+
+# Your PostGIS database URL
+database_url = "postgresql+psycopg2://myusername:mypassword@mydatabase.hosting.com:5432/mydatabase"
+
+engine = create_engine(database_url)
+with engine.connect() as connection:
+    result = connection.execute(text('SELECT DISTINCT "ratnagiri_final_current_status" FROM "RN_DIV"'))
+    all_statuses = [row[0] for row in result if row[0] not in sum(current_status_groups.values(), [])]
     
-    if response.status_code == 200:
-        return response.json()
-    else:
-        st.error(f"Error fetching statuses: {response.text}")
-        return []
 
-# Fetch all unique status values from the API
-all_statuses = fetch_unique_statuses()
-current_status_groups['Others'] = [status for status in all_statuses if status not in sum(current_status_groups.values(), [])]
+    current_status_groups['Others'] = all_statuses
+    all_current_statuses = sum(current_status_groups.values(), [])
+    selected_current_statuses = st.multiselect("Select Current Status", all_current_statuses)
 
-# Combine all statuses into a single list for selection
-all_current_statuses = sum(current_status_groups.values(), [])
+    block_filter = f' AND "block_name" = \'{selected_block}\'' if selected_block != "All" else ""
 
-# Allow the user to select one or multiple current statuses
-selected_current_statuses = st.multiselect("Select Current Status", all_current_statuses)
+    if selected_current_statuses:
+        filtered_statuses = filter(None, selected_current_statuses)
+        values_list = "', '".join(filtered_statuses)
+        query = f'SELECT * FROM "RN_DIV" WHERE "ratnagiri_final_current_status" IN (\'{values_list}\'){block_filter}'
 
-block_filter = f' AND "block_name" = \'{selected_block}\'' if selected_block != "All" else ""
-
-if selected_current_statuses:
-    # Filter out None values
-    filtered_statuses = filter(None, selected_current_statuses)
-    # Convert the selected values to a string for SQL IN clause
-    values_list = "', '".join(filtered_statuses)
-    query = f'SELECT * FROM "RN_DIV" WHERE "ratnagiri_final_current_status" IN (\'{values_list}\'){block_filter}'
+    
+    # Fetch all unique status values from the database
+    engine = create_engine(database_url)
+    with engine.connect() as connection:
+        result = connection.execute(text('SELECT DISTINCT "ratnagiri_final_current_status" FROM "RN_DIV"'))
+        all_statuses = [row[0] for row in result if row[0] not in sum(current_status_groups.values(), [])]
+    
+    current_status_groups['Others'] = all_statuses
+    
+    # Combine all statuses into a single list for selection
+    all_current_statuses = sum(current_status_groups.values(), [])
+    
+    # Allow the user to select one or multiple current statuses
+    selected_current_statuses = st.multiselect("Select Current Status", all_current_statuses)
+    
+    if selected_current_statuses:
+        # Filter out None values
+        filtered_statuses = filter(None, selected_current_statuses)
+        # Convert the selected values to a string for SQL IN clause
+        values_list = "', '".join(filtered_statuses)
+        query = f'SELECT * FROM "RN_DIV" WHERE "ratnagiri_final_current_status" IN (\'{values_list}\')'
 
 
 # Initialize gdf to an empty GeoDataFrame

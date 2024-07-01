@@ -6,7 +6,7 @@ import geopandas as gpd
 import os
 
 # Database configuration
-DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql+psycopg2://shreeshnadgouda:yash1234@127.0.0.1:5432/testing1')
+DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql+psycopg2://shreeshnadgouda:yash1234@localhost:5432/testing1')
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
