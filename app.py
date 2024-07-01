@@ -1,4 +1,3 @@
-import requests
 import streamlit as st
 import geopandas as gpd
 import folium
@@ -8,25 +7,38 @@ from sqlalchemy.pool import QueuePool
 import pandas as pd
 from datetime import datetime
 from urllib.parse import quote_plus
-import os 
 
 # Database configuration
-DATABASE_URL = "postgresql+psycopg2://shreeshnadgouda:yash1234@localhost:5432/testing1"
-engine = create_engine(DATABASE_URL)
+database = {
+    'host': "127.0.0.1",
+    'port': 5432,  # Postgres default port
+    'db': "testing1",
+    'user': "shreeshnadgouda",
+    'password': "yash1234",
+}
 
-# Fetch data from API with caching
+# SQLAlchemy engine creation with connection pooling
+def get_postgis_engine():
+    url = (
+        f'postgresql+psycopg2://'
+        f'{database["user"]}:{quote_plus(database["password"])}'
+        f'@{database["host"]}:{database["port"]}'
+        f'/{database["db"]}'
+    )
+    engine = create_engine(url, poolclass=QueuePool, pool_size=5, max_overflow=10)
+    return engine
+
+# Fetch data from database with caching
 @st.cache_data(ttl=600)
 def fetch_data(query):
-    try:
-        with engine.connect() as connection:
-            result = connection.execute(text(query))
-            gdf = gpd.GeoDataFrame.from_postgis(result, geom_col='geom')
-            if gdf.crs is None:
-                gdf.set_crs(epsg=4326, inplace=True)  # Assuming the fetched data uses WGS84 CRS
-            return gdf
-    except Exception as e:
-        st.error(f"Error fetching data: {str(e)}")
-        return gpd.GeoDataFrame()
+    engine = get_postgis_engine()
+    with engine.connect() as connection:
+        gdf = gpd.read_postgis(text(query), con=connection, geom_col='geom')
+    
+    if gdf.crs is None:
+        gdf.set_crs(epsg=4326, inplace=True)  # Assuming the fetched data uses WGS84 CRS
+    
+    return gdf
 
 # Convert date from `dd.mm.yyyy` to `yyyy-mm-dd`
 def convert_date(date_str):
@@ -65,7 +77,7 @@ road_network_gdf = load_road_network_gdf(road_network_shapefile_path)
 st.title("Ratnagiri District Road Network Mapping")
 
 # Dropdown for selecting a category
-category = st.selectbox("Select a Category", ["Road Length", "Date", "Road Type", "Block Name", "Scheme Name", "Category of Work", "Total Expenditure", "Approved Amount", "Compare Expenditure and Approved Amount", "PCI After Completion of Work", "Current Status"])
+category = st.selectbox("Select a Category", ["Road Length", "Date", "Road Type", "Block Name", "Scheme Name", "Category of Work", "Contractor Name", "Total Expenditure", "Approved Amount", "Compare Expenditure and Approved Amount", "PCI After Completion of Work", "Current Status"])
 
 query = ""
 
@@ -216,6 +228,248 @@ elif category == "Category of Work":
         where_clause = " OR ".join(conditions)
         query = f'SELECT * FROM "RN_DIV" WHERE ({where_clause}){block_filter}'
 
+
+
+elif category == "Contractor Name":
+    # Define the unique contractor names for the 'ratnagiri_final_contractor_name' category
+    contractor_names_groups = [
+    'Abhishek Ms. ask',
+    'Adil Mahmmad Ajim Thakur',
+    'Akhyaksha Shramjeevi, S.M.Labor.Institute Marya.Rajapur',
+    'Akshay Ashok Pawar M.Po.Phansop Ta.Ratnagiri',
+    'AM swamy',
+    'amol balkrushna khandare',
+    'Ashfaq Hajju',
+    'Ask Mr. Abhishek Sudhir',
+    'Avish Qutbuhaddin goalkeeper, Rs. Saundal',
+    'Babu Habu Chavan M.Po.Pawas',
+    'bettigiri',
+    'Bhavesh Sonu Narkar M.Po.Saundal Dist.Rajapur',
+    'Chairman Adarsh Mazdoor Co-Operative Society Marya Mu.Po. Ta.Lanja',
+    'Chairman Dapoli Taluka Ma San Dapoli',
+    'Chairman Prerna Mazur Sahkari Sansya. Marya M.Po. Anjani T. Village Ratnagiri District',
+    'Chairman Rajapur Taluka M.S.S.Marya Mu.Po.Rajapur',
+    'Chairman Shramjeevi Mazur .S. Sanstha. Marya. Raipatan Dist.Rajapur',
+    'Chairman Sukai Devi M S San Pedhambe Chiplun',
+    'Chairman Vireshwar Labor Co-operative Society Ltd.,Mu.Po. Ta.Chiplun Dist.Ratnagiri',
+    'Chairman Vireshwar Mazur Sahkari Sanstha Marya..M.P.O. h Chiplun Dist.Ratnagiri',
+    'Chairman, Bhagyodaya M.S. M.Po.Kumble Ta.Mandangaon',
+    'Chairman, Shivtej Mazur with. Sanstha Phansop',
+    'Dhaneshwar cont',
+    'Dinesh Chandrakant Jathar',
+    'Dipashree Construction',
+    'Diptesh Prabhakar Kadam M.Po.Barsu Ta.Rajapur',
+    'Five-star labourer',
+    'Fuzel Ibzi',
+    'Gaurav Patole',
+    'Gaurav V. Patole',
+    'Gaurav Vijay Solgaonkar M.Po.Lanja',
+    'Hon. Sarpanch, Gram Panchayat Punas Tehsil Lanja',
+    'Hon\'ble Sarpanch Gram Panchayat Vervali Khu.Padvan',
+    'Hon\'ble Sarpanch, Gram Panchayat Panval, Ratnagiri',
+    'Institution Marya with President, Siddharth Mazur. gods',
+    'Jahid Khan',
+    'Jan Seva Mazur Co., Ltd',
+    'Kedardev Kisan M.S.No.Marya.Agve Dist.Chiplun',
+    'Kedarling Knstr. Ta. Sangameshwar.',
+    'Kedarlinga Construction',
+    'Kedarlinga Construction Prop. Shri Mangesh Ya Shinde Bhadkamba',
+    'Kondwadi Project M.S.No.Marya.Vashi T.Sangamashwar',
+    'Ku.Yashraj Construction Prof.P.Kiraan Yashwant Tulsawdekar',
+    'Labor Labor Asst. Institute Raipatan, Ta.Rajapur, Dist.Ratnagiri',
+    'Laboring labourers',
+    'Lalit Charudatta Kadam',
+    'M.Yash Construction',
+    'Mahalsa',
+    'Mahalsa Constr.Propra Shri. Shankar Gu.Sevlani Ulhasnagar Thane',
+    'Mahalsa Construction',
+    'Mahalsa Construction Prof. Shankar Th. Sewlani Ulhasnagar Thane',
+    'Mahalsa Construction Proprietary. Shankar Gurudas Sewalani Ta.Ratnagiri',
+    'Manish Vasant Lingalat Mu.Po.Oni Ta .Rajapur',
+    'Mauli Enterprises Kanjeevara',
+    'Mhalsa Construction',
+    'Milid Vijay More',
+    'Mister. Suresh Bhagoji Jhor',
+    'Motilal Nuru Rathod',
+    'Mr. Afam et al. Thakur',
+    'Mr. Akshay Ashok Pawar, M.P. Karbude, T. Dist. Ratnagiri',
+    'Mr. Akshay Ramu Chavan',
+    'Mr. Akshay Suryakant Desai',
+    'Mr. Akshay Suryakant Desai.',
+    'Mr. Amit Harishchandra Bandbe',
+    'Mr. Anant Babasaheb Chaugule',
+    'Mr. Aniket Rajendra Khatu',
+    'Mr. Anil Babu Rathore',
+    'Mr. Anil Maruti Salunke',
+    'Mr. Anil Subhash asked',
+    'Mr. Anup Narendra Gunijan M.Po. Kondhethar Sub-district Rajapur',
+    'Mr. Arnun Narayan Kesrekar',
+    'Mr. Ashfaq Ismail Haju M.Po. Talgaon District Rajapur',
+    'Mr. Ashok Kalu Pawar',
+    'Mr. Ashraf H. Mukri',
+    'Mr. Babu Habu Chavan, M.Po.Pawas,T. Dist. Ratnagiri',
+    'Mr. Bhavesh Sonu Narkar',
+    'Mr. D. S. Padyar',
+    'Mr. Devendra Dattaram fights',
+    'Mr. Diptesh Prabhakar Kadam',
+    'Mr. Diptesh Prabhakar Kadam M.P. Barsu Sub-district Rajapur, District Ratnagiri',
+    'Mr. Gauri Charudatta Kadam',
+    'Mr. Gurdas Subhash Desai.',
+    'Mr. Karishma Chandrashekhar Bendkhale',
+    'Mr. Kashinath Mohan Sakpal',
+    'Mr. Ketan Nandkishore More',
+    'Mr. Ketan Nandkishore More.',
+    'Mr. Kumar Desu Naik',
+    'Mr. Mahesh Prabhakar Desai',
+    'Mr. Mayur Milind Bhingard.',
+    'Mr. Mayur Milind Bhingarde',
+    'Mr. Mohan Desu Rathod',
+    'Mr. Motilal Naru Rathod M.Po.Pali',
+    'Mr. Motilal Nuru Rathod',
+    'Mr. Naresh Vishnu Sawant',
+    'Mr. Nasir Hassan Mujawar M.Po. h Rajapur Dist. Ratnagiri',
+    'Mr. Nikhil S. Khanwilkar',
+    'Mr. Nikhil Santaji Khanwilkar',
+    'Mr. Nitish Gopinath Kudali',
+    'Mr. Nitish Kudali',
+    'Mr. PA Salvi',
+    'Mr. Patiram Khiru Rathod M.P.O. Khedshi District Ratnagiri',
+    'Mr. Pradeep Mr. Neverrekar.',
+    'Mr. Pradip Kumar Pandurang Kale',
+    'Mr. Prashant Manohar Sawant',
+    'Mr. Prathamesh Pradip Nikam M.Po.Agve,T. Chiplun, District Ratnagiri',
+    'Mr. Rajesh Ramchandra Pawar',
+    'Mr. S.G. Padyar',
+    'Mr. Sachin Mahadev Pawar',
+    'Mr. Sagar Manohar asked',
+    'Mr. Sagar Shivaji Rathod',
+    'Mr. Sagar Shivaji Rathod Mu.Po.Patgaon Ta.Sangmeshwar',
+    'Mr. Sandesh Vijay Jagde',
+    'Mr. Sanju Revnu Rathod',
+    'Mr. Santosh Suresh Rathod',
+    'Mr. Sarpanch, Gram Panchayat Phanswale, Ratnagiri',
+    'Mr. Shailesh Suresh Jadyar',
+    'Mr. Shivlal Khiru Rathod',
+    'Mr. Siddesh Sadanand Vibhute',
+    'Mr. Somsingh Jivlu Rathod',
+    'Mr. Somsingh Jivlu Rathod M.P.O. Bhate Ta.Ratnagiri',
+    'Mr. Sumedh Mahendra Mahadeek',
+    'Mr. Vaibhav Kadam.',
+    'Mr. Vaishnavi Vitthal Girkar',
+    'Mr. Vikas Kisan Rathod',
+    'Mr. Vishal Jaywant Shinde M.P. Shirgaon Distt. Ratnagiri',
+    'Mr.Ashish Sandip Mohite',
+    'Mr. Vishal Jaywant Shinde, M.P. Shirgaon District. Ratnagiri',
+    'Mr.Ashish Sandip Mohite',
+    'Mr.Ganesh Krishna Adoor',
+    'Mr.Rajan Motiram Rathod M.P.O. Majgaon Ratnagiri',
+    'Mr.Seddhesh Upendra Pendhari, M.P.O. Devrukh Dist.Ratnagiri',
+    'Mr.Shital Navnath Todkar',
+    'MRD Samant Construction',
+    'Mrs. Sneha Madan Shinde',
+    'Ms. Avinash Anant Topre',
+    'Ms. Kiran Keshav Mestry',
+    'Ms. Nirali Sunil Deshmukh',
+    'Ms. Omkar Ramesh Divekar',
+    'Ms. Satyavan Damodar Bhadane, M.P.O. Dabhade',
+    'N. D. Construction',
+    'N.D. Constrction',
+    'Nilesh Balkrishna Doiphode',
+    'Nilesh Balkrishna Doiphode, M.Po. Karvande',
+    'Nitesh Rajaram Rathod',
+    'Nitin Mahendra Nair',
+    'Nitin Mahendra Nair, M.Po. Jaigad',
+    'Nitin Mahendra Nayyar',
+    'Nitin Sudhir Kadam',
+    'Om Sai Ram Construction',
+    'Omkareshwar Construction, M.P.O. Deoghar',
+    'P. K. Infraprojects',
+    'P.K Infra Project',
+    'Padmashree Construction',
+    'Padmashree Construction, Ms.Kiran Devgan Powar',
+    'Pradip Construction, M.Po. Tolewadi, Ta.Sangamashwar',
+    'Prafull Kumar Balu Surve',
+    'Premanand Mangesh Khamkar',
+    'Prithviraj Construction',
+    'Pundlik Balu Surve',
+    'Ramdas Mahadev Aaptekar',
+    'Ravikumar R. Khan.',
+    'Rayabandi Const.Pro.Llp M.Po. Mumbai',
+    'Rohit Pundlik Rathod M.Po. Anjanari Ta.Rajapur Distt. Ratnagiri',
+    'Rohit Ramakant Rathod',
+    'Rohit Ramakant Rathod M.Po. Mu.Po. Sangmeshwar',
+    'Sachin Sandip Patil',
+    'Sachin Sandip Patil, M.Po. Pali',
+    'Sadashiv Trimbak Parab',
+    'Sadguru Construction',
+    'Sadguru Construction M.Po. Dapoli',
+    'Sadguru Construction Prop.Sadashiv Trim Parab',
+    'Saikrupa Construction',
+    'Samadhan Dnyaneshwar Surve',
+    'Sanjay Shivaji Rathod M.Po.Murkutwadi',
+    'Santosh Vasudev Parbundi',
+    'Saptashrungi Construction',
+    'Saptshrungi Construction Prop. Ganesh Sagar Udhavne Mu.Po. Devgarh',
+    'Seemaji Construction',
+    'Shailesh Keshav Rathod',
+    'Shailesh Keshav Rathod M.Po. Masanwadi',
+    'Shailesh Madhavrao Rathod M.Po. Akharoli',
+    'Shantaram Ramchandra Rathod',
+    'Shashi Kamal Construction, Mu.Po. Mumbai',
+    'Shivaji Chintaman',
+    'Shivtej M.S.M.Po. Sade',
+    'Shraddha Construction',
+    'Shraddha Construction, M.Po. Mumbai',
+    'Shraddha Construction Prof. Shraddha Shahu',
+    'Shree Contraction, M.Po. Anvayi Ta. Chiplun',
+    'Shree Construction',
+    'Shree Sai Samartha Construction',
+    'Shree Sai Samarth Construction',
+    'Shree Siddhivinayak Construction',
+    'Shree Siddhivinayak Construction, Mu.Po. Devrukh',
+    'Shree Swami Samarth Construction',
+    'Shri Ganesh Construction',
+    'Shri Ganesh Construction, M.Po. Phansop',
+    'Shri Ganesh Construction, M.Po.Phasop T.Lanja',
+    'Shri Maruti Construction',
+    'Shri Maruti Construction, Prof. Ashok Purushottam Chavan, Mu.Po. Karvande',
+    'Shri Mhatreshwar Construction Prop.Shashikant Thakre,M.Po.Devghar',
+    'Shri Ramkrishna M.S.M.Po.Jaigad',
+    'Shri Sai Construction',
+    'Shri Samarth Construction, M.Po. Devghar',
+    'Shri Siddhivinayak Construction',
+    'Shri Siddhivinayak Construction Prof. Bhagvat Namdeorao Mauli, M.Po. Talgaon',
+    'Shri Siddhivinayak Construction,M.Po.Talgaon, Distt. Rajapur',
+    'Shri Swami Samarth Construction',
+    'Shri Swami Samarth Construction, Prop. Mahendra Navnath Mahadik, Mu.Po. Mumbai',
+    'Shriraj Const. Prof. T.R. Rathod',
+    'Shriram Construction',
+    'Siddhivinayak Construction',
+    'Siddhivinayak Construction M.Po. Mumbai',
+    'Siddhivinayak Construction, Prop. Kailas Yashwantrao Kadam, M.Po. Panval',
+    'Siddhivinayak Construction, Prop. Sarita Yashwant Kadam',
+    'Somnath Chintaman Shinde',
+    'Sudhir Construction, M.Po. Phansop',
+    'Sudhir Sitaram Nimbalkar',
+    'Suman Singh',
+    'Suman Singh Prop. Suman Singh, M.Po. Rajapur',
+    'Suresh Construction',
+    'Surya Construction Prop. Mr. Suryakant Yashwant Kadam',
+    'Tularam Ramakant Rathod M.Po.Rajapur',
+    'Vaishnavi Construction Prop. Shri. Suryakant,Mu.Po. Devghar',
+    'Vasanti Construction',
+    'Vishal Enterprises, M.Po. Mumbai',
+    'Yash Construction'
+]        
+    selected_contractors = st.multiselect("Select Contractor Names", contractor_names_groups)
+
+    block_filter = f' AND "block_name" = \'{selected_block}\'' if selected_block != "All" else ""
+
+    if selected_contractors:
+        contractor_list = "', '".join(selected_contractors)
+        query = f'SELECT * FROM "RN_DIV" WHERE "ratnagiri_final_contractor_name" IN (\'{contractor_list}\'){block_filter}'
+
+
 elif category == "Total Expenditure":
     query_type = st.selectbox("Select Query Type", ["Greater than", "Less than", "Equal to"])
     expenditure_value = st.slider("Select Expenditure (INR)", min_value=0, max_value=10000, value=1000, step=1)
@@ -277,16 +531,10 @@ elif category == "Current Status":
         'Others': []  
     }
 
-from sqlalchemy import create_engine, text
-
-# Your PostGIS database URL
-database_url = "postgresql+psycopg2://myusername:mypassword@mydatabase.hosting.com:5432/mydatabase"
-
-engine = create_engine(database_url)
-with engine.connect() as connection:
-    result = connection.execute(text('SELECT DISTINCT "ratnagiri_final_current_status" FROM "RN_DIV"'))
-    all_statuses = [row[0] for row in result if row[0] not in sum(current_status_groups.values(), [])]
-    
+    engine = get_postgis_engine()
+    with engine.connect() as connection:
+        result = connection.execute(text('SELECT DISTINCT "ratnagiri_final_current_status" FROM "RN_DIV"'))
+        all_statuses = [row[0] for row in result if row[0] not in sum(current_status_groups.values(), [])]
 
     current_status_groups['Others'] = all_statuses
     all_current_statuses = sum(current_status_groups.values(), [])
@@ -301,7 +549,7 @@ with engine.connect() as connection:
 
     
     # Fetch all unique status values from the database
-    engine = create_engine(database_url)
+    engine = get_postgis_engine()
     with engine.connect() as connection:
         result = connection.execute(text('SELECT DISTINCT "ratnagiri_final_current_status" FROM "RN_DIV"'))
         all_statuses = [row[0] for row in result if row[0] not in sum(current_status_groups.values(), [])]
