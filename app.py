@@ -28,7 +28,7 @@ def get_postgis_engine():
     engine = create_engine(url, poolclass=QueuePool, pool_size=5, max_overflow=10)
     return engine
 
-# Fetch data from database with caching
+# Fetch data from database
 @st.cache_data(ttl=600)
 def fetch_data(query):
     engine = get_postgis_engine()
@@ -39,6 +39,15 @@ def fetch_data(query):
         gdf.set_crs(epsg=4326, inplace=True)  # Assuming the fetched data uses WGS84 CRS
     
     return gdf
+
+# Fetch non-geometry data from database
+@st.cache_data(ttl=600)
+def fetch_non_geom_data(query):
+    engine = get_postgis_engine()
+    with engine.connect() as connection:
+        df = pd.read_sql(query, con=connection)
+    return df
+
 
 # Convert date from `dd.mm.yyyy` to `yyyy-mm-dd`
 def convert_date(date_str):
@@ -77,7 +86,7 @@ road_network_gdf = load_road_network_gdf(road_network_shapefile_path)
 st.title("Ratnagiri District Road Network Mapping")
 
 # Dropdown for selecting a category
-category = st.selectbox("Select a Category", ["Road Length", "Date", "Road Type", "Block Name", "Scheme Name", "Category of Work", "Contractor Name", "Total Expenditure", "Approved Amount", "Compare Expenditure and Approved Amount", "PCI After Completion of Work", "Current Status"])
+category = st.selectbox("Select a Category", ["Road Length", "Date", "Road Type", "Block Name", "Scheme Name", "Category of Work", "Contractor Name", "Total Expenditure", "Approved Amount", "Compare Expenditure and Approved Amount", "PCI After Completion of Work", "Current Status","Analysis and Reporting"])
 
 query = ""
 
@@ -459,7 +468,9 @@ elif category == "Contractor Name":
     'Vaishnavi Construction Prop. Shri. Suryakant,Mu.Po. Devghar',
     'Vasanti Construction',
     'Vishal Enterprises, M.Po. Mumbai',
-    'Yash Construction'
+    'Yash Construction',
+    'Yash contraction',
+    'Yash Cont'
 ]        
     selected_contractors = st.multiselect("Select Contractor Names", contractor_names_groups)
 
@@ -569,7 +580,133 @@ elif category == "Current Status":
         values_list = "', '".join(filtered_statuses)
         query = f'SELECT * FROM "RN_DIV" WHERE "ratnagiri_final_current_status" IN (\'{values_list}\')'
 
+if category == "Analysis and Reporting":
+    report_query = st.selectbox("Select Report Query", [
+        "Total Length of Roads by Taluka",
+        "Total Expenditure on Roads by Contractor",
+        "Total Expenditure by Road Category",
+        "Roads with Highest Approved Amount (Top 10)",
+        "Roads with Lowest Approved Amount (Bottom 10)",
+        "Roads with Delayed Completion",
+        "Roads by Contractor and Current Status",
+        "Count of Roads by Description of Work",
+        "Total Length of Roads by Scheme Name",
+        "Total Approved Amount by Contractor",
+        "Average Expenditure per Road by Contractor",
+        "Top 5 Contractors by Average PCI After Completion",
+        "Roads with High Expenditure to Length Ratio (Top 10)",
+        "Top 5 Schemes by Average Length of Roads",
+        "Contractor Workload: Number of Projects and Total Length",
+        "Top 10 Contractors with Most Roads Completed",
+        "Bottom 10 Contractors with Fewest Roads Completed",
+        "Count of Roads by Scheme Name",
+        "Average Expenditure by Road Category",
+        "Median Approved Amount by Contractor",
+        "Total Length of Roads by Contractor",
+        "Count of Roads by Status",
+        "Average Length of Roads by Taluka",
+        "Top 10 Roads by Expenditure per Kilometer",
+        "Count of Roads by Department",
+        "Average PCI After Completion by Taluka",
+        "Total Expenditure by Block",
+        "Contractor with Maximum Number of Roads",
+        "Top 10 Roads by Total Expenditure",
+        "Bottom 10 Roads by Total Expenditure",
+        "Count of Roads by Category of Work",
+        "Average Approved Amount by Scheme Name",
+        "Total Expenditure by Road Owner"
+    ])
 
+    # Queries that don't require geometry
+    non_geom_queries = [
+        "Total Length of Roads by Taluka",
+        "Total Expenditure on Roads by Contractor",
+        "Total Expenditure by Road Category",
+        "Roads with Highest Approved Amount (Top 10)",
+        "Roads with Lowest Approved Amount (Bottom 10)",
+        "Roads with Delayed Completion",
+        "Roads by Contractor and Current Status",
+        "Count of Roads by Description of Work",
+        "Total Length of Roads by Scheme Name",
+        "Total Approved Amount by Contractor",
+        "Average Expenditure per Road by Contractor",
+        "Top 5 Contractors by Average PCI After Completion",
+        "Roads with High Expenditure to Length Ratio (Top 10)",
+        "Top 5 Schemes by Average Length of Roads",
+        "Contractor Workload: Number of Projects and Total Length",
+        "Top 10 Contractors with Most Roads Completed",
+        "Bottom 10 Contractors with Fewest Roads Completed",
+        "Count of Roads by Scheme Name",
+        "Average Expenditure by Road Category",
+        "Median Approved Amount by Contractor",
+        "Total Length of Roads by Contractor",
+        "Count of Roads by Status",
+        "Average Length of Roads by Taluka",
+        "Top 10 Roads by Expenditure per Kilometer",
+        "Count of Roads by Department",
+        "Average PCI After Completion by Taluka",
+        "Total Expenditure by Block",
+        "Contractor with Maximum Number of Roads",
+        "Top 10 Roads by Total Expenditure",
+        "Bottom 10 Roads by Total Expenditure",
+        "Count of Roads by Category of Work",
+        "Average Approved Amount by Scheme Name",
+        "Total Expenditure by Road Owner"
+    ]
+
+    # Define the queries
+    queries = {
+        "Total Length of Roads by Taluka": 'SELECT "ratnagiri_final_taluka" AS Taluka, SUM("ratnagiri_final_total_length") AS TotalLength FROM "RN_DIV" GROUP BY "ratnagiri_final_taluka"',
+        "Total Expenditure on Roads by Contractor": 'SELECT "ratnagiri_final_contractor_name", SUM("ratnagiri_final_total_expenditure") AS TotalExpenditure FROM "RN_DIV" GROUP BY "ratnagiri_final_contractor_name"',
+        "Total Expenditure by Road Category": 'SELECT "roadcatego", SUM("ratnagiri_final_total_expenditure") AS TotalExpenditure FROM "RN_DIV" GROUP BY "roadcatego"',
+        "Roads with Highest Approved Amount (Top 10)": 'SELECT * FROM "RN_DIV" ORDER BY "ratnagiri_final_approved_amount" DESC LIMIT 10',
+        "Roads with Lowest Approved Amount (Bottom 10)": 'SELECT * FROM "RN_DIV" ORDER BY "ratnagiri_final_approved_amount" ASC LIMIT 10',
+        "Roads with Delayed Completion": 'SELECT * FROM "RN_DIV" WHERE "ratnagiri_final_current_status" = \'Delayed\'',
+        "Roads by Contractor and Current Status": 'SELECT "ratnagiri_final_contractor_name", "ratnagiri_final_current_status", COUNT(*) AS RoadCount FROM "RN_DIV" GROUP BY "ratnagiri_final_contractor_name", "ratnagiri_final_current_status"',
+        "Count of Roads by Description of Work": 'SELECT "ratnagiri_final_description_of_work", COUNT(*) AS RoadCount FROM "RN_DIV" GROUP BY "ratnagiri_final_description_of_work"',
+        "Total Length of Roads by Scheme Name": 'SELECT "ratnagiri_final_scheme_name", SUM("ratnagiri_final_total_length") AS TotalLength FROM "RN_DIV" GROUP BY "ratnagiri_final_scheme_name"',
+        "Total Approved Amount by Contractor": 'SELECT "ratnagiri_final_contractor_name", SUM("ratnagiri_final_approved_amount") AS TotalApprovedAmount FROM "RN_DIV" GROUP BY "ratnagiri_final_contractor_name"',
+        "Average Expenditure per Road by Contractor": 'SELECT "ratnagiri_final_contractor_name", AVG("ratnagiri_final_total_expenditure") AS AverageExpenditure FROM "RN_DIV" GROUP BY "ratnagiri_final_contractor_name"',
+        "Top 5 Contractors by Average PCI After Completion": 'SELECT "ratnagiri_final_contractor_name", AVG("ratnagiri_final_pci_after_completion_of_work") AS AveragePCI FROM "RN_DIV" GROUP BY "ratnagiri_final_contractor_name" ORDER BY AveragePCI DESC LIMIT 5',
+        "Roads with High Expenditure to Length Ratio (Top 10)": 'SELECT *, ("ratnagiri_final_total_expenditure" / "ratnagiri_final_total_length") AS ExpenditureToLengthRatio FROM "RN_DIV" ORDER BY ExpenditureToLengthRatio DESC LIMIT 10',
+        "Top 5 Schemes by Average Length of Roads": 'SELECT "ratnagiri_final_scheme_name", AVG("ratnagiri_final_total_length") AS AverageLength FROM "RN_DIV" GROUP BY "ratnagiri_final_scheme_name" ORDER BY AverageLength DESC LIMIT 5',
+        "Contractor Workload: Number of Projects and Total Length": 'SELECT "ratnagiri_final_contractor_name", COUNT(*) AS NumberOfProjects, SUM("ratnagiri_final_total_length") AS TotalLength FROM "RN_DIV" GROUP BY "ratnagiri_final_contractor_name"',
+        "Top 10 Contractors with Most Roads Completed": 'SELECT "ratnagiri_final_contractor_name", COUNT(*) AS CompletedRoads FROM "RN_DIV" WHERE "ratnagiri_final_current_status" = \'Completed\' GROUP BY "ratnagiri_final_contractor_name" ORDER BY CompletedRoads DESC LIMIT 10',
+        "Bottom 10 Contractors with Fewest Roads Completed": 'SELECT "ratnagiri_final_contractor_name", COUNT(*) AS CompletedRoads FROM "RN_DIV" WHERE "ratnagiri_final_current_status" = \'Completed\' GROUP BY "ratnagiri_final_contractor_name" ORDER BY CompletedRoads ASC LIMIT 10',
+        "Count of Roads by Scheme Name": 'SELECT "ratnagiri_final_scheme_name", COUNT(*) AS RoadCount FROM "RN_DIV" GROUP BY "ratnagiri_final_scheme_name"',
+        "Average Expenditure by Road Category": 'SELECT "roadcatego", AVG("ratnagiri_final_total_expenditure") AS AverageExpenditure FROM "RN_DIV" GROUP BY "roadcatego"',
+        "Median Approved Amount by Contractor": 'SELECT "ratnagiri_final_contractor_name", PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY "ratnagiri_final_approved_amount") AS MedianApprovedAmount FROM "RN_DIV" GROUP BY "ratnagiri_final_contractor_name"',
+        "Total Length of Roads by Contractor": 'SELECT "ratnagiri_final_contractor_name", SUM("ratnagiri_final_total_length") AS TotalLength FROM "RN_DIV" GROUP BY "ratnagiri_final_contractor_name"',
+        "Count of Roads by Status": 'SELECT "ratnagiri_final_current_status", COUNT(*) AS RoadCount FROM "RN_DIV" GROUP BY "ratnagiri_final_current_status"',
+        "Average Length of Roads by Taluka": 'SELECT "ratnagiri_final_taluka", AVG("ratnagiri_final_total_length") AS AverageLength FROM "RN_DIV" GROUP BY "ratnagiri_final_taluka"',
+        "Top 10 Roads by Expenditure per Kilometer": 'SELECT *, ("ratnagiri_final_total_expenditure" / "ratnagiri_final_total_length") AS ExpenditurePerKm FROM "RN_DIV" ORDER BY ExpenditurePerKm DESC LIMIT 10',
+        "Count of Roads by Department": 'SELECT "ratnagiri_final_department", COUNT(*) AS RoadCount FROM "RN_DIV" GROUP BY "ratnagiri_final_department"',
+        "Average PCI After Completion by Taluka": 'SELECT "ratnagiri_final_taluka", AVG("ratnagiri_final_pci_after_completion_of_work") AS AveragePCI FROM "RN_DIV" GROUP BY "ratnagiri_final_taluka"',
+        "Total Expenditure by Block": 'SELECT "block_name", SUM("ratnagiri_final_total_expenditure") AS TotalExpenditure FROM "RN_DIV" GROUP BY "block_name"',
+        "Contractor with Maximum Number of Roads": 'SELECT "ratnagiri_final_contractor_name", COUNT(*) AS NumberOfRoads FROM "RN_DIV" GROUP BY "ratnagiri_final_contractor_name" ORDER BY NumberOfRoads DESC LIMIT 1',
+        "Top 10 Roads by Total Expenditure": 'SELECT * FROM "RN_DIV" ORDER BY "ratnagiri_final_total_expenditure" DESC LIMIT 10',
+        "Bottom 10 Roads by Total Expenditure": 'SELECT * FROM "RN_DIV" ORDER BY "ratnagiri_final_total_expenditure" ASC LIMIT 10',
+        "Count of Roads by Category of Work": 'SELECT "ratnagiri_final_category_of_work", COUNT(*) AS RoadCount FROM "RN_DIV" GROUP BY "ratnagiri_final_category_of_work"',
+        "Average Approved Amount by Scheme Name": 'SELECT "ratnagiri_final_scheme_name", AVG("ratnagiri_final_approved_amount") AS AverageApprovedAmount FROM "RN_DIV" GROUP BY "ratnagiri_final_scheme_name"',
+        "Total Expenditure by Road Owner": 'SELECT "roadowner", SUM("ratnagiri_final_total_expenditure") AS TotalExpenditure FROM "RN_DIV" GROUP BY "roadowner"'
+    }
+
+    # Get the corresponding query for the selected report
+    query = queries.get(report_query)
+
+    # Execute the query based on whether it requires geometry or not
+    if report_query in non_geom_queries:
+        df = fetch_non_geom_data(query)
+    else:
+        df = fetch_data(query)
+
+    # Display the results
+    if report_query in non_geom_queries:
+        st.write(df)
+    else:
+        st.map(df)
+
+    
 # Initialize gdf to an empty GeoDataFrame
 gdf = gpd.GeoDataFrame()
 
@@ -646,4 +783,3 @@ if not gdf.empty:
 folium.LayerControl().add_to(m)
 
 st_folium(m, width=900, height=800)
-
