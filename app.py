@@ -83,10 +83,10 @@ def load_road_network_gdf(path):
 road_network_gdf = load_road_network_gdf(road_network_shapefile_path)
 
 # Streamlit app
-st.title("Ratnagiri District Road Network Mapping")
+st.title("Ratnagiri District Road Network- Query Dasboard and Data Analysis")
 
 # Dropdown for selecting a category
-category = st.selectbox("Select a Category", ["Road Length", "Date", "Road Type", "Block Name", "Scheme Name", "Category of Work", "Contractor Name", "Total Expenditure", "Approved Amount", "Compare Expenditure and Approved Amount", "PCI After Completion of Work", "Current Status","Analysis and Reporting"])
+category = st.selectbox("Select a Category", ["Road Length", "Date", "Road Type", "Scheme Name", "Category of Work", "Contractor Name", "Total Expenditure", "Approved Amount", "Compare Expenditure and Approved Amount", "PCI After Completion of Work", "Current Status","Analysis and Reporting"])
 
 query = ""
 
@@ -168,16 +168,6 @@ elif category == "Road Type":
         conditions = [f'"drrp_road_" LIKE \'{road_type}%\'' for road_type in selected_types]
         where_clause = " OR ".join(conditions)
         query = f'SELECT * FROM "RN_DIV" WHERE ({where_clause}){block_filter}'
-
-elif category == "Block Name":
-    block_names = ["LANJA", "RAJAPUR", "RATNAGIRI", "SANGAMESHWAR"]
-    selected_blocks = st.multiselect("Select Block Names", block_names)
-
-    block_filter = f' AND "block_name" = \'{selected_block}\'' if selected_block != "All" else ""
-
-    if selected_blocks:
-        block_list = "', '".join(selected_blocks)
-        query = f'SELECT * FROM "RN_DIV" WHERE "Block_Name" IN (\'{block_list}\'){block_filter}'
 
 elif category == "Scheme Name":
     scheme_names = [
@@ -483,7 +473,7 @@ elif category == "Contractor Name":
 
 elif category == "Total Expenditure":
     query_type = st.selectbox("Select Query Type", ["Greater than", "Less than", "Equal to"])
-    expenditure_value = st.slider("Select Expenditure (INR)", min_value=0, max_value=10000, value=1000, step=1)
+    expenditure_value = st.slider("Select Expenditure (INR in Lakhs)", min_value=0, max_value=10000, value=1000, step=1)
 
     block_filter = f' AND "block_name" = \'{selected_block}\'' if selected_block != "All" else ""
 
@@ -496,7 +486,7 @@ elif category == "Total Expenditure":
 
 elif category == "Approved Amount":
     query_type = st.selectbox("Select Query Type", ["Greater than", "Less than", "Equal to"])
-    approved_amount_value = st.slider("Select Approved Amount (INR)", min_value=0, max_value=10000, value=1000, step=1)
+    approved_amount_value = st.slider("Select Approved Amount (INR in Lakhs)", min_value=0, max_value=10000, value=1000, step=1)
 
     block_filter = f' AND "block_name" = \'{selected_block}\'' if selected_block != "All" else ""
 
