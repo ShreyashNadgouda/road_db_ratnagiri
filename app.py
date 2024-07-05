@@ -10,11 +10,11 @@ from urllib.parse import quote_plus
 
 # Database configuration
 database = {
-    'host': "127.0.0.1",
+    'host': "gio-db.cv4gsy2g6s53.ap-south-1.rds.amazonaws.com",
     'port': 5432,  # Postgres default port
-    'db': "testing1",
-    'user': "shreeshnadgouda",
-    'password': "yash1234",
+    'db': "RN_DIV",
+    'user': "gio_master",
+    'password': "road_pci",
 }
 
 # SQLAlchemy engine creation with connection pooling
@@ -70,6 +70,7 @@ def load_district_gdf(path):
     return district_gdf
 
 district_gdf = load_district_gdf(district_shapefile_path)
+print(type(district_gdf))
 
 
 # Load road network shapefile
