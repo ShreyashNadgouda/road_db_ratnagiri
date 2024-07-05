@@ -70,7 +70,6 @@ def load_district_gdf(path):
     return district_gdf
 
 district_gdf = load_district_gdf(district_shapefile_path)
-print(type(district_gdf))
 
 
 # Load road network shapefile
